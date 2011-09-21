@@ -769,6 +769,7 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
                 ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                               "Mongo connection dropped, could not reconnect");
                 if(&mongo_conn->conn.connected) { mongo_disconnect(&mongo_conn->conn); }
+                free(value);
                 return NGX_HTTP_SERVICE_UNAVAILABLE;
             }
         }
@@ -803,6 +804,7 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
                 if(&mongo_conn->conn.connected) { mongo_disconnect(&mongo_conn->conn); }
                 bson_destroy(&query);
                 free(value);
+                gridfs_destroy(&gfs);
                 return NGX_HTTP_SERVICE_UNAVAILABLE;
             }
         }
@@ -812,6 +814,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
     free(value);
 
     if(!found){
+        gridfile_destroy(&gfile);
+        gridfs_destroy(&gfs);
         return NGX_HTTP_NOT_FOUND;
     }
 
@@ -858,6 +862,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
         ngx_log_error(NGX_LOG_ERR, request->connection->log, 0, gridfile_get_field(&gfile,"gzipped") );
         request->headers_out.content_encoding = ngx_list_push(&request->headers_out.headers);
         if (request->headers_out.content_encoding == NULL) {
+            gridfile_destroy(&gfile);
+            gridfs_destroy(&gfs);
             return NGX_ERROR;
         }
         request->headers_out.content_encoding->hash = 1;
@@ -878,6 +884,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
         if (buffer == NULL) {
             ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                           "Failed to allocate response buffer");
+            gridfile_destroy(&gfile);
+            gridfs_destroy(&gfs);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -887,11 +895,15 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
         buffer->last_buf = 1;
         out.buf = buffer;
         out.next = NULL;
+        gridfile_destroy(&gfile);
+        gridfs_destroy(&gfs);
         return ngx_http_output_filter(request, &out);
     }
     
     cursors = (mongo_cursor **)ngx_pcalloc(request->pool, sizeof(mongo_cursor *) * numchunks);
     if (cursors == NULL) {
+      gridfile_destroy(&gfile);
+      gridfs_destroy(&gfs);
       return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     
@@ -900,6 +912,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
     /* Hook in the cleanup function */
     gridfs_cln = ngx_pool_cleanup_add(request->pool, sizeof(ngx_http_gridfs_cleanup_t));
     if (gridfs_cln == NULL) {
+      gridfile_destroy(&gfile);
+      gridfs_destroy(&gfs);
       return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
     gridfs_cln->handler = ngx_http_gridfs_cleanup;
@@ -915,6 +929,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
         if (buffer == NULL) {
             ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                           "Failed to allocate response buffer");
+            gridfile_destroy(&gfile);
+            gridfs_destroy(&gfs);
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -932,6 +948,8 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
                     ngx_log_error(NGX_LOG_ERR, request->connection->log, 0,
                                   "Mongo connection dropped, could not reconnect");
                     if(&mongo_conn->conn.connected) { mongo_disconnect(&mongo_conn->conn); }
+                    gridfile_destroy(&gfile);
+                    gridfs_destroy(&gfs);
                     return NGX_HTTP_SERVICE_UNAVAILABLE;
                 }
             }
@@ -955,10 +973,14 @@ static ngx_int_t ngx_http_gridfs_handler(ngx_http_request_t* request) {
 
         /* TODO: More Codes to Catch? */
         if (rc == NGX_ERROR) {
+            gridfile_destroy(&gfile);
+            gridfs_destroy(&gfs);
             return NGX_ERROR;
         }
     }
 
+    gridfile_destroy(&gfile);
+    gridfs_destroy(&gfs);
     return rc;
 }
 
